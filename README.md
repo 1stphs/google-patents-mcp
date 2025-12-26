@@ -21,7 +21,7 @@ git clone <repository-url>
 cd google-patents-mcp
 
 # 构建并启动
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### 更新部署
@@ -31,23 +31,23 @@ docker-compose up -d --build
 git pull
 
 # 重新构建并启动
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ### 查看日志
 
 ```bash
 # 实时查看日志
-docker-compose logs -f
+docker compose logs -f
 
 # 查看最近 100 行日志
-docker-compose logs --tail 100
+docker compose logs --tail 100
 ```
 
 ### 停止服务
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ### 验证服务状态
