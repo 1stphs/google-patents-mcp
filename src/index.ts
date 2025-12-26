@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { CallToolRequestSchema, ListToolsRequestSchema, ListResourcesRequestSchema, ListPromptsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js';
 import child_process from 'child_process';
 import * as dotenv from 'dotenv';
@@ -9,12 +10,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import * as fs from 'fs';
-import os from 'os'; // Import the os module
-// import axios from 'axios'; // Remove axios
-import fetch from 'node-fetch'; // Import node-fetch
+import os from 'os';
+import fetch from 'node-fetch';
+import express, { Request, Response } from 'express';
+import cors from 'cors';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// 在任何环境变量检查之前加载 .env 文件
+dotenv.config();
 
 // ★★★★★★★★★★★★★★★★★★★★★★★★★★
 // ★ デバッグ用ログを追加 ★
@@ -44,11 +49,6 @@ const initialLogger = winston.createLogger({
     new winston.transports.Console()
   ]
 });
-
-// MCP Hostからの環境変数を優先し、.envファイルはフォールバックとして扱う
-// MCP Hostからの環境変数を優先し、.envファイルはフォールバックとして扱う
-// .env ファイルの読み込みロジックは削除済み
-// SERPAPI_API_KEY は環境変数からのみ取得する
 
 // ログレベルの明示的な確認（デバッグ用）
 // console.log(`Environment variable LOG_LEVEL: ${process.env.LOG_LEVEL}`); // Temporarily commented out
@@ -214,21 +214,21 @@ process.on('uncaughtException', (err) => {
 const SERPAPI_API_KEY = process.env.SERPAPI_API_KEY;
 
 if (!SERPAPI_API_KEY) {
-    logger.error('Error: SERPAPI_API_KEY environment variable is not set.');
-    logger.debug('Missing required SERPAPI_API_KEY environment variable, exiting');
-    process.exit(1);
+  logger.error('Error: SERPAPI_API_KEY environment variable is not set.');
+  logger.debug('Missing required SERPAPI_API_KEY environment variable, exiting');
+  process.exit(1);
 } else {
-    logger.info('SERPAPI_API_KEY found.');
-    logger.debug('SERPAPI_API_KEY is set (value hidden for security).');
+  logger.info('SERPAPI_API_KEY found.');
+  logger.debug('SERPAPI_API_KEY is set (value hidden for security).');
 }
 
 // Base64 エンコード／デコード ヘルパー関数
 function encodeText(text: string): string {
-    return Buffer.from(text, 'utf8').toString('base64');
+  return Buffer.from(text, 'utf8').toString('base64');
 }
 
 function decodeText(encoded: string): string {
-    return Buffer.from(encoded, 'base64').toString('utf8');
+  return Buffer.from(encoded, 'base64').toString('utf8');
 }
 
 class GooglePatentsServer {
@@ -348,26 +348,26 @@ class GooglePatentsServer {
           logger.info(`Calling SerpApi: ${apiUrl.replace(SERPAPI_API_KEY, '****')}`); // ログにはAPIキーを隠す
 
           // Use node-fetch with AbortController for timeout (controller と timeoutId は上で定義済み)
-            const response = await fetch(apiUrl, { signal: controller.signal });
+          const response = await fetch(apiUrl, { signal: controller.signal });
 
-            if (!response.ok) {
-              // Handle HTTP errors (like 4xx, 5xx)
-              let errorBody = 'Could not retrieve error body.'; // Default error message
-              try {
-                errorBody = await response.text(); // Try to get error body
-              } catch (bodyError) {
-                logger.warn(`Failed to read error response body: ${bodyError instanceof Error ? bodyError.message : String(bodyError)}`);
-              }
-              logger.error(`SerpApi request failed with status ${response.status} ${response.statusText}. Response body: ${errorBody}`); // Log the actual error body
-              throw new McpError(response.status, `SerpApi request failed: ${response.statusText}. Body: ${errorBody}`); // Include body in error
+          if (!response.ok) {
+            // Handle HTTP errors (like 4xx, 5xx)
+            let errorBody = 'Could not retrieve error body.'; // Default error message
+            try {
+              errorBody = await response.text(); // Try to get error body
+            } catch (bodyError) {
+              logger.warn(`Failed to read error response body: ${bodyError instanceof Error ? bodyError.message : String(bodyError)}`);
             }
+            logger.error(`SerpApi request failed with status ${response.status} ${response.statusText}. Response body: ${errorBody}`); // Log the actual error body
+            throw new McpError(response.status, `SerpApi request failed: ${response.statusText}. Body: ${errorBody}`); // Include body in error
+          }
 
-            const data = await response.json(); // Parse JSON response
-            logger.info(`SerpApi request successful for query: "${q}"`);
-            logger.debug(`SerpApi response status: ${response.status}`);
-            // レスポンスを type: 'text' の JSON 文字列として返す
-            clearTimeout(timeoutId); // 成功時もタイマーをクリア
-            return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
+          const data = await response.json(); // Parse JSON response
+          logger.info(`SerpApi request successful for query: "${q}"`);
+          logger.debug(`SerpApi response status: ${response.status}`);
+          // レスポンスを type: 'text' の JSON 文字列として返す
+          clearTimeout(timeoutId); // 成功時もタイマーをクリア
+          return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 
         } catch (error: any) {
           clearTimeout(timeoutId); // エラー発生時もタイマーをクリア
@@ -380,8 +380,8 @@ class GooglePatentsServer {
           logger.error(`Unexpected error: ${error.stack}`);
           throw new McpError(500, `An unexpected error occurred: ${error.message}`);
         } finally {
-           // finally は不要になったので削除 (clearTimeout は try の最後と catch の最初で行う)
-           // clearTimeout(timeoutId); // try の最後でクリアするか、catch の最初でクリアする
+          // finally は不要になったので削除 (clearTimeout は try の最後と catch の最初で行う)
+          // clearTimeout(timeoutId); // try の最後でクリアするか、catch の最初でクリアする
         }
         // --- 元のコードここまで ---
       } else { // This else corresponds to 'if (name === 'search_patents')'
@@ -392,18 +392,111 @@ class GooglePatentsServer {
   }
 
   async run() {
-    // ★★★ run() メソッド開始直後 ★★★
+    // 解析命令行参数
+    const args = process.argv.slice(2);
+    const useSSE = args.includes('--sse');
+    const portIndex = args.indexOf('--port');
+    const port = portIndex !== -1 && args[portIndex + 1] ? parseInt(args[portIndex + 1], 10) : 8107;
+
     console.log('[DEBUG] Server run() method started');
     logger.debug('Starting Google Patents MCP server');
+
+    if (useSSE) {
+      // SSE 模式
+      await this.runSSE(port);
+    } else {
+      // Stdio 模式（默认）
+      await this.runStdio();
+    }
+  }
+
+  private async runStdio() {
     const transport = new StdioServerTransport();
     logger.debug('Created StdioServerTransport');
-    // ★★★ connect() 呼び出し直前 ★★★
     console.log('[DEBUG] Calling server.connect(transport)');
     await this.server.connect(transport);
-    // ★★★ connect() 呼び出し直後 ★★★
     console.log('[DEBUG] server.connect(transport) completed');
     logger.info("Google Patents MCP server running on stdio");
     logger.debug('Server connected to transport and ready to process requests');
+  }
+
+  private async runSSE(port: number) {
+    const app = express();
+
+    // 启用 CORS
+    app.use(cors({
+      origin: '*',
+      methods: ['GET', 'POST', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    }));
+
+    // 解析 JSON 请求体
+    app.use(express.json());
+
+    // 存储活跃的 SSE 连接
+    const transports: Map<string, SSEServerTransport> = new Map();
+
+    // SSE 端点 - 客户端连接此端点建立 SSE 连接
+    app.get('/sse', async (req: Request, res: Response) => {
+      logger.info('New SSE connection request received');
+
+      // 创建 SSE 传输
+      const transport = new SSEServerTransport('/messages', res);
+      const sessionId = transport.sessionId;
+      transports.set(sessionId, transport);
+
+      logger.info(`SSE connection established, sessionId: ${sessionId}`);
+
+      // 连接关闭时清理
+      res.on('close', () => {
+        logger.info(`SSE connection closed, sessionId: ${sessionId}`);
+        transports.delete(sessionId);
+      });
+
+      // 连接服务器 (connect 会自动调用 transport.start())
+      await this.server.connect(transport);
+    });
+
+    // 消息端点 - 接收客户端发送的消息
+    app.post('/messages', async (req: Request, res: Response) => {
+      const sessionId = req.query.sessionId as string;
+
+      if (!sessionId) {
+        logger.warn('Message received without sessionId');
+        res.status(400).json({ error: 'Missing sessionId' });
+        return;
+      }
+
+      const transport = transports.get(sessionId);
+      if (!transport) {
+        logger.warn(`No transport found for sessionId: ${sessionId}`);
+        res.status(404).json({ error: 'Session not found' });
+        return;
+      }
+
+      logger.debug(`Received message for sessionId: ${sessionId}`);
+
+      try {
+        // 传递 req.body 作为第三个参数
+        await transport.handlePostMessage(req, res, req.body);
+      } catch (error) {
+        logger.error(`Error handling message: ${error}`);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    });
+
+    // 健康检查端点
+    app.get('/health', (req: Request, res: Response) => {
+      res.json({ status: 'ok', mode: 'sse', port });
+    });
+
+    // 启动 HTTP 服务器
+    app.listen(port, () => {
+      console.log(`[SSE] Google Patents MCP server running on http://localhost:${port}`);
+      console.log(`[SSE] SSE endpoint: http://localhost:${port}/sse`);
+      console.log(`[SSE] Messages endpoint: http://localhost:${port}/messages`);
+      logger.info(`Google Patents MCP server running in SSE mode on port ${port}`);
+    });
   }
 }
 

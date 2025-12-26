@@ -1,9 +1,9 @@
 # Smithery configuration file: https://smithery.ai/docs/config#smitheryyaml
 
+# Stdio mode configuration
 startCommand:
   type: stdio
   configSchema:
-    # JSON Schema defining the configuration options for the MCP.
     type: object
     required:
       - serpapiApiKey
@@ -11,9 +11,8 @@ startCommand:
       serpapiApiKey:
         type: string
         description: SerpApi API key for authenticating requests
-    description: Configuration for Google Patents MCP Server
+    description: Configuration for Google Patents MCP Server (Stdio Mode)
   commandFunction:
-    # A JS function that produces the CLI command based on the given config to start the MCP on stdio.
     |-
     (config) => ({
       command: 'node',
@@ -21,4 +20,8 @@ startCommand:
       env: { SERPAPI_API_KEY: config.serpapiApiKey }
     })
   exampleConfig:
-    serpapiApiKey: YOUR_SERPAPI_API_KEY_HERE
+    serpapiApiKey: a33a143758565da0ab6378366dc91138fe3fbfc1a2142e526c57a38882f9b2a6
+
+# SSE mode configuration (alternative)
+# To use SSE mode, deploy with:
+# docker run -p 8107:8107 -e SERPAPI_API_KEY=your_key google-patents-mcp --sse

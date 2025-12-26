@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  google-patents-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: google-patents-mcp
+    restart: unless-stopped
+    ports:
+      - "8107:8107"
+    environment:
+      - SERPAPI_API_KEY=${SERPAPI_API_KEY:-a33a143758565da0ab6378366dc91138fe3fbfc1a2142e526c57a38882f9b2a6}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - PORT=8107
+    command: ["--sse"]
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8107/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

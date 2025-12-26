@@ -29,7 +29,14 @@ COPY --from=builder /app/build ./build
 # Ensure non-root ownership of app files
 RUN chown -R node:node /app
 
-# Expose stdio for MCP communication
-# Start the MCP server
+# Default environment variables
+ENV SERPAPI_API_KEY=a33a143758565da0ab6378366dc91138fe3fbfc1a2142e526c57a38882f9b2a6
+ENV PORT=8107
+
+# Expose port for SSE mode
+EXPOSE 8107
+
+# Start the MCP server (default: stdio mode, use --sse for SSE mode)
 USER node
-CMD ["node", "build/index.js"]
+ENTRYPOINT ["node", "build/index.js"]
+CMD []
